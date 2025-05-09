@@ -2418,8 +2418,20 @@ export class WAStartupService {
   }
 
   public async findAllGroups() {
+    type Resp = GroupMetadata & { listParticipants: string[] };
     try {
-      return await this.client.groupFetchAllParticipating();
+      const response = await this.client.groupFetchAllParticipating();
+      const ids: string[] = [];
+      const groups: Resp[] = [];
+
+      for (const [k, v] of Object.entries(response)) {
+        ids.push(k);
+        const group: Resp = v as any;
+        group.listParticipants = v.participants.map((item) => item.id);
+        groups.push(group);
+      }
+
+      return { ids, groups };
     } catch (error) {
       throw new BadRequestException('Error searching all groups', error.toString());
     }

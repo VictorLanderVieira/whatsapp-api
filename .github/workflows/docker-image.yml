@@ -43,7 +43,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            codechat/api:latest
-            codechat/api:v${{ env.version }}
+            lander85/whatsapp-api:latest
+            lander85/whatsapp-api:v${{ env.version }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache

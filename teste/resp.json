@@ -1,0 +1,36 @@
+{
+  "ids": [
+    "120363371778341559@g.us",
+    "120363197100429171@g.us",
+    "120363046517145691@g.us",
+    "120363150099764210@g.us",
+    "120363371297769324@g.us",
+    "120363029388654192@g.us",
+    "120363180048116957@g.us"
+  ],
+  "groups": [
+    {
+      "id": "120363371778341559@g.us",
+      "subject": "CodeChat Hub⛓️‍💥",
+      "subjectOwner": "553171351854@s.whatsapp.net",
+      "subjectTime": 1732719649,
+      "size": 1,
+      "creation": 1732701129,
+      "owner": "553171351854@s.whatsapp.net",
+      "desc": "API CodeChat",
+      "descId": "7C5BA084B01A60BE59279FBF4DEE0F34",
+      "restrict": false,
+      "announce": false,
+      "isCommunity": true,
+      "isCommunityAnnounce": false,
+      "joinApprovalMode": false,
+      "memberAddMode": false,
+      "participants": [
+        {
+          "id": "553171351854@s.whatsapp.net",
+          "admin": "superadmin"
+        }
+      ]
+    }
+  ]
+}
