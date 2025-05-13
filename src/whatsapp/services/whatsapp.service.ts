@@ -830,7 +830,6 @@ export class WAStartupService {
             messageType,
             content: m.message[messageType] as PrismType.Prisma.JsonValue,
             messageTimestamp: m.messageTimestamp as number,
-            createdAt: new Date((m.messageTimestamp as number) * 1000),
             instanceId: this.instance.id,
             device: getDevice(m.key.id),
           } as PrismType.Message);
@@ -891,14 +890,11 @@ export class WAStartupService {
           isGroup: isJidGroup(received.key.remoteJid),
         } as PrismType.Message;
 
-        messageRaw.createdAt = new Date(messageRaw.messageTimestamp * 1000);
-
         if (this.databaseOptions.DB_OPTIONS.NEW_MESSAGE) {
-          const { id, createdAt } = await this.repository.message.create({
+          const { id } = await this.repository.message.create({
             data: messageRaw,
           });
           messageRaw.id = id;
-          messageRaw.createdAt = createdAt;
         }
 
         if (type === 'append') {
@@ -918,12 +914,6 @@ export class WAStartupService {
 
         this.logger.log('Type: ' + type);
         console.log(messageRaw);
-        console.log({
-          msg_tme: messageRaw.messageTimestamp,
-          createdAt: messageRaw.createdAt.getTime(),
-          now: Date.now(),
-          date: new Date(),
-        });
 
         this.ws.send(this.instance.name, 'messages.upsert', messageRaw);
 
