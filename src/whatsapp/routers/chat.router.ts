@@ -255,6 +255,16 @@ export function ChatRouter(chatController: ChatController, ...guards: RequestHan
 
       res.status(HttpStatus.OK).json(response);
     })
+    .get(routerPath('findMessagesByDate'), ...guards, async (req, res) => {
+      const response = await dataValidate<Query<Message>>({
+        request: req,
+        schema: null,
+        execute: (instance) =>
+          chatController.fetchMessageByDate(instance, req.query?.date as string),
+      });
+
+      res.status(HttpStatus.OK).json(response);
+    })
     .get(routerPath('findChats'), ...guards, async (req, res) => {
       const response = await dataValidate<InstanceDto>({
         request: req,

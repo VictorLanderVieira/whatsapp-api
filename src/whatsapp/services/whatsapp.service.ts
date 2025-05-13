@@ -104,14 +104,7 @@ import {
   SendReactionDto,
   SendTextDto,
 } from '../dto/sendMessage.dto';
-import {
-  isArray,
-  isBase64,
-  isInt,
-  isNotEmpty,
-  isNumberString,
-  isURL,
-} from 'class-validator';
+import { isArray, isBase64, isInt, isNotEmpty, isURL } from 'class-validator';
 import {
   ArchiveChatDto,
   DeleteMessage,
@@ -157,6 +150,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
+import dayjs, { isDayjs } from 'dayjs';
 
 type InstanceQrCode = {
   count: number;
@@ -168,6 +162,28 @@ type InstanceStateConnection = {
   state: 'open' | 'close' | 'refused' | WAConnectionState;
   statusReason?: number;
 };
+
+class Select {
+  static readonly message = {
+    id: true,
+    keyId: true,
+    keyFromMe: true,
+    keyRemoteJid: true,
+    keyParticipant: true,
+    pushName: true,
+    messageType: true,
+    content: true,
+    messageTimestamp: true,
+    instanceId: true,
+    device: true,
+    MessageUpdate: {
+      select: {
+        status: true,
+        dateTime: true,
+      },
+    },
+  };
+}
 
 export class WAStartupService {
   constructor(
@@ -814,6 +830,7 @@ export class WAStartupService {
             messageType,
             content: m.message[messageType] as PrismType.Prisma.JsonValue,
             messageTimestamp: m.messageTimestamp as number,
+            createdAt: new Date((m.messageTimestamp as number) * 1000),
             instanceId: this.instance.id,
             device: getDevice(m.key.id),
           } as PrismType.Message);
@@ -874,9 +891,14 @@ export class WAStartupService {
           isGroup: isJidGroup(received.key.remoteJid),
         } as PrismType.Message;
 
+        messageRaw.createdAt = new Date(messageRaw.messageTimestamp * 1000);
+
         if (this.databaseOptions.DB_OPTIONS.NEW_MESSAGE) {
-          const { id } = await this.repository.message.create({ data: messageRaw });
+          const { id, createdAt } = await this.repository.message.create({
+            data: messageRaw,
+          });
           messageRaw.id = id;
+          messageRaw.createdAt = createdAt;
         }
 
         if (type === 'append') {
@@ -896,6 +918,12 @@ export class WAStartupService {
 
         this.logger.log('Type: ' + type);
         console.log(messageRaw);
+        console.log({
+          msg_tme: messageRaw.messageTimestamp,
+          createdAt: messageRaw.createdAt.getTime(),
+          now: Date.now(),
+          date: new Date(),
+        });
 
         this.ws.send(this.instance.name, 'messages.upsert', messageRaw);
 
@@ -1320,6 +1348,13 @@ export class WAStartupService {
 
         this.client.ev.emit('messages.upsert', { messages: [m], type: 'notify' });
 
+        const messageTimestamp = (() => {
+          if (Long.isLong(m.messageTimestamp)) {
+            return m.messageTimestamp.toNumber();
+          }
+          return m.messageTimestamp as number;
+        })();
+
         return {
           id: undefined,
           keyId: m.key.id,
@@ -1329,12 +1364,8 @@ export class WAStartupService {
           pushName: m?.pushName,
           messageType: getContentType(m.message),
           content: m.message[getContentType(m.message)] as PrismType.Prisma.JsonValue,
-          messageTimestamp: (() => {
-            if (Long.isLong(m.messageTimestamp)) {
-              return m.messageTimestamp.toNumber();
-            }
-            return m.messageTimestamp as number;
-          })(),
+          messageTimestamp,
+          createdAt: new Date(messageTimestamp * 1000),
           instanceId: this.instance.id,
           device: 'web',
           isGroup: isJidGroup(m.key.remoteJid),
@@ -2298,25 +2329,7 @@ export class WAStartupService {
       },
       skip: query.offset * (query?.page === 1 ? 0 : (query?.page as number) - 1),
       take: query.offset,
-      select: {
-        id: true,
-        keyId: true,
-        keyFromMe: true,
-        keyRemoteJid: true,
-        keyParticipant: true,
-        pushName: true,
-        messageType: true,
-        content: true,
-        messageTimestamp: true,
-        instanceId: true,
-        device: true,
-        MessageUpdate: {
-          select: {
-            status: true,
-            dateTime: true,
-          },
-        },
-      },
+      select: Select.message,
     });
 
     return {
@@ -2327,6 +2340,38 @@ export class WAStartupService {
         records: messages,
       },
     };
+  }
+
+  public async fetchMessageByDate(d?: string) {
+    if (!d) {
+      const now = new Date();
+      d = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+    }
+    const date = dayjs(d, { format: 'YYYY-MM-DD', locale: 'pt-br' });
+
+    if (!date.isValid()) {
+      throw new BadRequestException(
+        'The date must be in the following format yyyy-mm-dd',
+      );
+    }
+
+    const end = date.add(1, 'day');
+
+    return this.repository.message.findMany({
+      where: {
+        messageType: {
+          not: 'protocolMessage',
+        },
+        messageTimestamp: {
+          gte: date.unix(),
+          lt: end.unix(),
+        },
+      },
+      orderBy: {
+        messageTimestamp: 'desc',
+      },
+      select: Select.message,
+    });
   }
 
   public async fetchChats(type?: string) {
