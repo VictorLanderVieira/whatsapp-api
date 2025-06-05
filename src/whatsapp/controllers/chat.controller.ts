@@ -103,7 +103,7 @@ export class ChatController {
     return await this.waMonitor.waInstances.get(instanceName).fetchMessages(query);
   }
 
-  public async fetchMessageByDate({ instanceName }: InstanceDto, query: string) {
+  public async fetchMessageByDate({ instanceName }: InstanceDto, query: any) {
     return await this.waMonitor.waInstances.get(instanceName).fetchMessageByDate(query);
   }
 

@@ -259,8 +259,7 @@ export function ChatRouter(chatController: ChatController, ...guards: RequestHan
       const response = await dataValidate<Query<Message>>({
         request: req,
         schema: null,
-        execute: (instance) =>
-          chatController.fetchMessageByDate(instance, req.query?.date as string),
+        execute: (instance) => chatController.fetchMessageByDate(instance, req.query),
       });
 
       res.status(HttpStatus.OK).json(response);

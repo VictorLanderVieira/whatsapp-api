@@ -2332,12 +2332,12 @@ export class WAStartupService {
     };
   }
 
-  public async fetchMessageByDate(d?: string) {
-    if (!d) {
+  public async fetchMessageByDate(query?: { date?: string; jid?: string }) {
+    if (!query?.date) {
       const now = new Date();
-      d = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+      query.date = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
     }
-    const date = dayjs(d, { format: 'YYYY-MM-DD', locale: 'pt-br' });
+    const date = dayjs(query.date, { format: 'YYYY-MM-DD', locale: 'pt-br' });
 
     if (!date.isValid()) {
       throw new BadRequestException(
@@ -2352,6 +2352,7 @@ export class WAStartupService {
         messageType: {
           not: 'protocolMessage',
         },
+        keyRemoteJid: query?.jid,
         messageTimestamp: {
           gte: date.unix(),
           lt: end.unix(),
