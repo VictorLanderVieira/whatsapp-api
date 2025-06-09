@@ -1288,7 +1288,7 @@ export class WAStartupService {
         await this.client.sendPresenceUpdate('paused', recipient);
       }
 
-      const messageSent: PrismType.Message = await (async () => {
+      const messageSent: Partial<PrismType.Message> = await (async () => {
         let q: proto.IWebMessageInfo;
         if (quoted) {
           q = {
@@ -1346,7 +1346,6 @@ export class WAStartupService {
         })();
 
         return {
-          id: undefined,
           keyId: m.key.id,
           keyFromMe: m.key.fromMe,
           keyRemoteJid: m.key.remoteJid,
@@ -1363,7 +1362,7 @@ export class WAStartupService {
       })();
       if (this.databaseOptions.DB_OPTIONS.NEW_MESSAGE) {
         const { id } = await this.repository.message.create({
-          data: messageSent,
+          data: messageSent as PrismType.Message,
         });
         messageSent.id = id;
       }
