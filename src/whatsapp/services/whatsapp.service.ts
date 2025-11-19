@@ -152,6 +152,7 @@ import {
   writeFileSync,
 } from 'fs';
 import dayjs from 'dayjs';
+import { fetchLatestBaileysVersionV2 } from '../../utils/wa-version';
 
 type InstanceQrCode = {
   count: number;
@@ -537,7 +538,7 @@ export class WAStartupService {
 
     this.authState = (await this.defineAuthState()) as AuthState;
 
-    const version = JSON.parse(this.configService.get<string>('WA_VERSION')) as WAVersion;
+    const { version } = await fetchLatestBaileysVersionV2();
     const session = this.configService.get<ConfigSessionPhone>('CONFIG_SESSION_PHONE');
     const browser: WABrowserDescription = [session.CLIENT, session.NAME, release()];
 
