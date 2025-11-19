@@ -53,7 +53,7 @@ import makeWASocket, {
   getDevice,
   GroupMetadata,
   isJidGroup,
-  isJidUser,
+  isPnUser,
   makeCacheableSignalKeyStore,
   MessageUpsertType,
   ParticipantAction,
@@ -65,6 +65,7 @@ import makeWASocket, {
   WACallEvent,
   WAConnectionState,
   WAMediaUpload,
+  WAMessage,
   WAMessageUpdate,
   WASocket,
   WAVersion,
@@ -150,7 +151,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
-import dayjs, { isDayjs } from 'dayjs';
+import dayjs from 'dayjs';
 
 type InstanceQrCode = {
   count: number;
@@ -823,10 +824,12 @@ export class WAStartupService {
 
           messagesRaw.push({
             keyId: m.key.id,
-            keyRemoteJid: m.key.remoteJid,
+            keyRemoteJid: m.key?.remoteJid,
+            keyLid: m.key?.remoteJidAlt,
             keyFromMe: m.key.fromMe,
             pushName: m?.pushName || m.key.remoteJid.split('@')[0],
             keyParticipant: m?.participant || m.key?.participant,
+            keyParticipantLid: m.key?.participantAlt,
             messageType,
             content: m.message[messageType] as PrismType.Prisma.JsonValue,
             messageTimestamp: m.messageTimestamp as number,
@@ -835,7 +838,7 @@ export class WAStartupService {
           } as PrismType.Message);
         }
 
-        this.sendDataWebhook('messagesSet', [...messagesRaw]);
+        this.sendDataWebhook('messagesSet', [...messagesRaw]).catch(() => null);
 
         if (this.databaseOptions.DB_OPTIONS.SYNC_MESSAGES) {
           await this.syncMessage(messagesRaw);
@@ -849,7 +852,7 @@ export class WAStartupService {
       messages,
       type,
     }: {
-      messages: proto.IWebMessageInfo[];
+      messages: WAMessage[];
       type: MessageUpsertType;
     }) => {
       for (const received of messages) {
@@ -873,10 +876,12 @@ export class WAStartupService {
 
         const messageRaw = {
           keyId: received.key.id,
-          keyRemoteJid: received.key.remoteJid,
+          keyRemoteJid: received.key?.remoteJid,
+          keyLid: received.key?.remoteJidAlt,
           keyFromMe: received.key.fromMe,
           pushName: received.pushName,
           keyParticipant: received?.participant || received.key?.participant,
+          keyParticipantLid: received.key?.participantAlt,
           messageType,
           content: received.message[messageType] as PrismType.Prisma.JsonValue,
           messageTimestamp: received.messageTimestamp as number,
@@ -1101,7 +1106,7 @@ export class WAStartupService {
 
         if (events?.['group-participants.update']) {
           const payload = events['group-participants.update'];
-          this.groupHandler['group-participants.update'](payload);
+          this.groupHandler['group-participants.update'](payload as any);
         }
 
         if (events?.['chats.upsert']) {
@@ -1183,7 +1188,8 @@ export class WAStartupService {
   }
 
   private createJid(number: string): string {
-    if (number.includes('@g.us') || number.includes('@s.whatsapp.net')) {
+    const regexp = new RegExp(/^\d+@(s.whatsapp.net|g.us|lid|broadcast|newsletter)$/i);
+    if (regexp.test(number)) {
       return number;
     }
 
@@ -1289,7 +1295,7 @@ export class WAStartupService {
       }
 
       const messageSent: Partial<PrismType.Message> = await (async () => {
-        let q: proto.IWebMessageInfo;
+        let q: WAMessage;
         if (quoted) {
           q = {
             key: {
@@ -1303,7 +1309,7 @@ export class WAStartupService {
           };
         }
 
-        let m: proto.IWebMessageInfo;
+        let m: WAMessage;
 
         const messageId = options?.messageId || ulid(Date.now());
 
@@ -1325,7 +1331,7 @@ export class WAStartupService {
           m.key = {
             id: id,
             remoteJid: jid,
-            participant: isJidUser(jid) ? jid : undefined,
+            participant: isPnUser(jid) ? jid : undefined,
             fromMe: true,
           };
 
@@ -1348,8 +1354,10 @@ export class WAStartupService {
         return {
           keyId: m.key.id,
           keyFromMe: m.key.fromMe,
-          keyRemoteJid: m.key.remoteJid,
-          keyParticipant: m?.participant,
+          keyRemoteJid: m.key?.remoteJid,
+          keyLid: m.key?.remoteJidAlt,
+          keyParticipant: m?.participant || m.key?.participant,
+          keyParticipantLid: m.key?.participantAlt,
           pushName: m?.pushName,
           messageType: getContentType(m.message),
           content: m.message[getContentType(m.message)] as PrismType.Prisma.JsonValue,
@@ -1608,12 +1616,10 @@ export class WAStartupService {
       }
 
       if (mediaMessage.mediatype === 'image') {
-        const p = await sharp(preview || media)
+        prepareMedia.imageMessage.jpegThumbnail = await sharp(preview || media)
           .resize(320, 240, { fit: 'contain' })
           .toFormat('jpeg', { quality: 80 })
           .toBuffer();
-
-        prepareMedia.imageMessage.jpegThumbnail = p;
       }
 
       return generateWAMessageFromContent(
@@ -1946,8 +1952,7 @@ export class WAStartupService {
         instanceId: this.instance.id,
       };
       if (isInt(data.id)) {
-        const id = Number.parseInt(data.id);
-        where.id = id;
+        where.id = Number.parseInt(data.id);
       } else {
         where.keyId = data.id;
       }
@@ -2000,7 +2005,7 @@ export class WAStartupService {
     try {
       const keys: proto.IMessageKey[] = [];
       data.readMessages.forEach((read) => {
-        if (isJidGroup(read.remoteJid) || isJidUser(read.remoteJid)) {
+        if (isJidGroup(read.remoteJid) || isPnUser(read.remoteJid)) {
           keys.push({
             remoteJid: read.remoteJid,
             fromMe: read.fromMe,
@@ -2162,7 +2167,7 @@ export class WAStartupService {
     ];
 
     try {
-      const msg: proto.IWebMessageInfo = m?.content
+      const msg: WAMessage = m?.content
         ? {
             key: {
               id: m.keyId,
@@ -2173,7 +2178,7 @@ export class WAStartupService {
               [m.messageType]: m.content,
             },
           }
-        : ((await this.getMessage(m, true)) as proto.IWebMessageInfo);
+        : ((await this.getMessage(m, true)) as WAMessage);
 
       if (msg?.message?.documentWithCaptionMessage) {
         msg.message.documentMessage =
