@@ -563,8 +563,12 @@ export class WAStartupService {
     const session = this.configService.get<ConfigSessionPhone>('CONFIG_SESSION_PHONE');
     const browser: WABrowserDescription = [session.CLIENT, session.NAME, release()];
 
-    const { EXPIRATION_TIME } = this.configService.get<QrCode>('QRCODE');
+    let { EXPIRATION_TIME } = this.configService.get<QrCode>('QRCODE');
     const CONNECTION_TIMEOUT = this.configService.get<number>('CONNECTION_TIMEOUT');
+
+    if (this.phoneNumber) {
+      EXPIRATION_TIME = 600;
+    }
 
     const socketConfig: UserFacingSocketConfig = {
       auth: {
