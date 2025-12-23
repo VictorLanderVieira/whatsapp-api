@@ -158,6 +158,7 @@ type InstanceQrCode = {
   count: number;
   code?: string;
   base64?: string;
+  randomCode?: string;
 };
 
 type InstanceStateConnection = {
@@ -206,15 +207,22 @@ export class WAStartupService {
   private readonly webhook: Partial<Webhook> & { events?: WebhookEvents } = {};
   private readonly msgRetryCounterCache: CacheStore = new NodeCache();
   private readonly userDevicesCache: CacheStore = new NodeCache();
-  private readonly instanceQr: InstanceQrCode = { count: 0 };
+  private readonly instanceQr: InstanceQrCode = {
+    count: 0,
+    randomCode: undefined,
+    code: undefined,
+    base64: undefined,
+  };
   private readonly stateConnection: InstanceStateConnection = { state: 'close' };
   private readonly databaseOptions: Database =
     this.configService.get<Database>('DATABASE');
 
-  private endSession = false;
   public client: WASocket;
+
+  private endSession = false;
   private authState: Partial<AuthState> = {};
   private authStateProvider: AuthStateProvider;
+  private phoneNumber: string;
 
   public async setInstanceName(name: string) {
     const i = await this.repository.instance.findUnique({
@@ -228,6 +236,10 @@ export class WAStartupService {
     });
 
     this.logger.subContext(`${i.id}:${i.name}`);
+  }
+
+  public set phone(value: string) {
+    this.phoneNumber = value;
   }
 
   public get instanceName() {
@@ -418,6 +430,12 @@ export class WAStartupService {
         color: { light: qrCodeOptions.LIGHT_COLOR, dark: qrCodeOptions.DARK_COLOR },
       };
 
+      let randomCode: string;
+
+      if (!this.client?.authState?.creds?.registered && this.phoneNumber) {
+        randomCode = await this.client.requestPairingCode(this.phoneNumber);
+      }
+
       qrcode.toDataURL(qr, optsQrcode, (error, base64) => {
         if (error) {
           this.logger.error('Qrcode generate failed:' + error.toString());
@@ -426,12 +444,15 @@ export class WAStartupService {
 
         this.instanceQr.base64 = base64;
         this.instanceQr.code = qr;
+        this.instanceQr.randomCode = randomCode;
 
-        this.ws.send(this.instance.name, 'qrcode.updated', { code: qr, base64 });
+        this.ws.send(this.instance.name, 'qrcode.updated', this.instanceQr);
 
         this.sendDataWebhook('qrcodeUpdated', {
-          qrcode: { instance: this.instance.name, code: qr, base64 },
+          qrcode: { instance: this.instance.name, ...this.instanceQr },
         });
+
+        this.eventEmitter.emit('code.connection', this.instanceQr);
       });
 
       qrcodeTerminal.generate(qr, { small: true }, (qrcode) =>
