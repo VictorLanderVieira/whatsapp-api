@@ -40,6 +40,7 @@
 import makeWASocket, {
   AnyMessageContent,
   BaileysEventMap,
+  Browsers,
   BufferedEventData,
   CacheStore,
   Chat,
@@ -561,7 +562,9 @@ export class WAStartupService {
 
     const { version } = await fetchLatestBaileysVersionV2();
     const session = this.configService.get<ConfigSessionPhone>('CONFIG_SESSION_PHONE');
-    const browser: WABrowserDescription = [session.CLIENT, session.NAME, release()];
+    const browser: WABrowserDescription = this.phoneNumber
+      ? Browsers.macOS('Chrome')
+      : [session.CLIENT, session.NAME, release()];
 
     let { EXPIRATION_TIME } = this.configService.get<QrCode>('QRCODE');
     const CONNECTION_TIMEOUT = this.configService.get<number>('CONNECTION_TIMEOUT');
