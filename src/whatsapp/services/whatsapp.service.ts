@@ -54,6 +54,7 @@ import makeWASocket, {
   getDevice,
   GroupMetadata,
   isJidGroup,
+  isLidUser,
   isPnUser,
   makeCacheableSignalKeyStore,
   MessageUpsertType,
@@ -62,6 +63,8 @@ import makeWASocket, {
   proto,
   useMultiFileAuthState,
   UserFacingSocketConfig,
+  USyncQuery,
+  USyncUser,
   WABrowserDescription,
   WACallEvent,
   WAConnectionState,
@@ -560,7 +563,7 @@ export class WAStartupService {
 
     this.authState = (await this.defineAuthState()) as AuthState;
 
-    const { version } = await fetchLatestBaileysVersionV2();
+    const { version } = fetchLatestBaileysVersionV2();
     const session = this.configService.get<ConfigSessionPhone>('CONFIG_SESSION_PHONE');
     const browser: WABrowserDescription = this.phoneNumber
       ? Browsers.macOS('Chrome')
@@ -1574,7 +1577,7 @@ export class WAStartupService {
           responseType: 'arraybuffer',
         });
 
-        mimetype = response.headers['content-type'];
+        mimetype = response.headers['content-type'] as string;
         if (!ext) {
           ext = mime.extension(mimetype) as string;
         }
@@ -2009,22 +2012,58 @@ export class WAStartupService {
     const onWhatsapp: OnWhatsAppDto[] = [];
     for await (const number of data.numbers) {
       const jid = this.createJid(number);
+      if (isLidUser(jid)) {
+        onWhatsapp.push(new OnWhatsAppDto(true, '', jid));
+      }
       if (isJidGroup(jid)) {
         const group = await this.findGroup({ groupJid: jid }, 'inner');
-        onWhatsapp.push(new OnWhatsAppDto(group.id, !!group?.id, group?.subject));
+        onWhatsapp.push(new OnWhatsAppDto(!!group?.id, group.id, '', group?.subject));
       } else if (jid.includes('@broadcast')) {
-        onWhatsapp.push(new OnWhatsAppDto(jid, true));
+        onWhatsapp.push(new OnWhatsAppDto(true, jid));
       } else {
         try {
           const result = (await this.client.onWhatsApp(jid))[0];
-          onWhatsapp.push(new OnWhatsAppDto(result.jid, !!result.exists));
+          
+          let lid: string | undefined;
+          if (result?.exists) {
+            const item = (await this.getLid(result.jid))[0]
+            lid = item?.lid
+          }
+          onWhatsapp.push(
+            new OnWhatsAppDto(!!result.exists, result.jid, lid),
+          );
         } catch (error) {
-          onWhatsapp.push(new OnWhatsAppDto(number, false));
+          onWhatsapp.push(new OnWhatsAppDto(false, number));
         }
       }
     }
 
     return onWhatsapp;
+  }
+
+  public async getLid(...jids: string[]): Promise<{ id: string, lid: string }[]> {
+    const q = new USyncQuery().withLIDProtocol().withContext('background');
+    
+    for (const jid of jids) {
+      if (isLidUser(jid)){
+        continue;
+      }
+
+      q.withUser(new USyncUser().withId(jid));
+    }
+
+    if (q.users.length === 0) {
+      return [];
+    }
+
+    const results = await this.client.executeUSyncQuery(q);
+    if (results) {
+      return results.list.
+        filter(i => !!i?.lid)
+        .map(({ lid, id }) => ({ lid, id }) as { id: string, lid: string });
+    }
+
+    return [];
   }
 
   /**
