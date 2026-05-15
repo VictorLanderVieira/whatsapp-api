@@ -74,7 +74,7 @@ export async function dataValidate<T>(args: DataValidate<T>) {
   }
 
   if (
-    request?.query &&
+    Object.keys(request?.query || {}).length > 0 &&
     ['get', 'delete', 'patch'].includes(request.method.toLowerCase())
   ) {
     Object.assign(body, request.query);
