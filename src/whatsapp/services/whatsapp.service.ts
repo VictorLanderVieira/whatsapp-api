@@ -703,7 +703,7 @@ export class WAStartupService {
             this.repository.chat
               .update({
                 where: {
-                  id: result.id,
+                  id: result?.id,
                 },
                 data: {
                   content: chat.content,
@@ -1308,7 +1308,7 @@ export class WAStartupService {
       throw new BadRequestException(isWA);
     }
 
-    const recipient = isJidGroup(jid) ? jid : isWA.jid;
+    const recipient = isLidUser(jid) || isJidGroup(jid) ? jid : isWA.jid;
 
     if (isJidGroup(recipient)) {
       try {
@@ -1386,15 +1386,14 @@ export class WAStartupService {
         return {
           keyId: m.key.id,
           keyFromMe: m.key.fromMe,
-          keyRemoteJid: m.key?.remoteJid,
-          keyLid: m.key?.remoteJidAlt,
+          keyRemoteJid: !isLidUser(m.key?.remoteJid) ? m.key?.remoteJid : '',
+          keyLid: isLidUser(m.key?.remoteJid) ? m.key?.remoteJid : m.key?.remoteJidAlt,
           keyParticipant: m?.participant || m.key?.participant,
           keyParticipantLid: m.key?.participantAlt,
           pushName: m?.pushName,
           messageType: getContentType(m.message),
           content: m.message[getContentType(m.message)] as PrismType.Prisma.JsonValue,
           messageTimestamp,
-          createdAt: new Date(messageTimestamp * 1000),
           instanceId: this.instance.id,
           device: 'web',
           isGroup: isJidGroup(m.key.remoteJid),
@@ -1408,6 +1407,7 @@ export class WAStartupService {
       }
 
       messageSent['externalAttributes'] = options?.externalAttributes;
+      messageSent['createdAt'] = new Date(messageSent.messageTimestamp * 1000);
 
       this.ws.send(this.instance.name, 'send.message', messageSent);
       this.sendDataWebhook('sendMessage', messageSent).catch((error) =>
@@ -2023,15 +2023,13 @@ export class WAStartupService {
       } else {
         try {
           const result = (await this.client.onWhatsApp(jid))[0];
-          
+
           let lid: string | undefined;
           if (result?.exists) {
-            const item = (await this.getLid(result.jid))[0]
-            lid = item?.lid
+            const item = (await this.getLid(result.jid))[0];
+            lid = item?.lid;
           }
-          onWhatsapp.push(
-            new OnWhatsAppDto(!!result.exists, result.jid, lid),
-          );
+          onWhatsapp.push(new OnWhatsAppDto(!!result.exists, result.jid, lid));
         } catch (error) {
           onWhatsapp.push(new OnWhatsAppDto(false, number));
         }
@@ -2041,11 +2039,11 @@ export class WAStartupService {
     return onWhatsapp;
   }
 
-  public async getLid(...jids: string[]): Promise<{ id: string, lid: string }[]> {
+  public async getLid(...jids: string[]): Promise<{ id: string; lid: string }[]> {
     const q = new USyncQuery().withLIDProtocol().withContext('background');
-    
+
     for (const jid of jids) {
-      if (isLidUser(jid)){
+      if (isLidUser(jid)) {
         continue;
       }
 
@@ -2058,9 +2056,9 @@ export class WAStartupService {
 
     const results = await this.client.executeUSyncQuery(q);
     if (results) {
-      return results.list.
-        filter(i => !!i?.lid)
-        .map(({ lid, id }) => ({ lid, id }) as { id: string, lid: string });
+      return results.list
+        .filter((i) => !!i?.lid)
+        .map(({ lid, id }) => ({ lid, id }) as { id: string; lid: string });
     }
 
     return [];
